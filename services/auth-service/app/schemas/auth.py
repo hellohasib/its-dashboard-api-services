@@ -88,6 +88,43 @@ class UserUpdate(BaseModel):
     department: Optional[str] = Field(None, max_length=100)
 
 
+class UserRolesUpdate(BaseModel):
+    """User roles update schema"""
+    roles: List[str] = Field(..., description="List of role names to assign to the user")
+
+    @validator("roles", pre=True)
+    def validate_roles_provided(cls, value):
+        """Ensure the roles field is provided"""
+        if value is None:
+            raise ValueError("Roles list is required")
+        return value
+
+    @validator("roles", each_item=True)
+    def validate_role_name(cls, role_name: str) -> str:
+        """Ensure each role name is non-empty"""
+        sanitized = role_name.strip()
+        if not sanitized:
+            raise ValueError("Role name cannot be empty")
+        return sanitized
+
+    @validator("roles")
+    def validate_unique_roles(cls, roles: List[str]) -> List[str]:
+        """Ensure role names are unique"""
+        if len(set(roles)) != len(roles):
+            raise ValueError("Duplicate roles are not allowed")
+        return roles
+
+
+class AdminUserUpdate(BaseModel):
+    """Super admin user update schema"""
+    full_name: Optional[str] = Field(None, max_length=255)
+    phone: Optional[str] = Field(None, max_length=20)
+    department: Optional[str] = Field(None, max_length=100)
+    notes: Optional[str] = Field(None, max_length=2000)
+    is_active: Optional[bool] = None
+    is_verified: Optional[bool] = None
+
+
 class PasswordChange(BaseModel):
     """Password change schema"""
     current_password: str
