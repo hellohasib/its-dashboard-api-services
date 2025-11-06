@@ -1,0 +1,42 @@
+version: '3.8'
+
+# Alternative docker-compose override for using local MariaDB/MySQL
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.local-db.yml up
+
+services:
+  # Remove MySQL container and use local database
+  mysql:
+    profiles: ["donotstart"]  # This prevents the service from starting
+
+  auth-service:
+    environment:
+      - DB_HOST=host.docker.internal  # Use host machine's database
+      - DB_PORT=3306  # Local MariaDB port
+      - DB_NAME=${DB_NAME:-its_dashboard}
+      - DB_USER=${DB_USER:-traffic_db_user}
+      - DB_PASS=${DB_PASS:-$!gM!nd00125680}
+    depends_on:
+      mysql:
+        condition: service_started  # Keep mysql dependency but use service_started instead of healthy
+      redis:
+        condition: service_healthy  # Only depend on Redis, not MySQL
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Allows container to access host machine
+
+  anpr-service:
+    environment:
+      - DB_HOST=host.docker.internal  # Use host machine's database
+      - DB_PORT=3306  # Local MariaDB port
+      - DB_NAME=${DB_NAME:-its_dashboard}
+      - DB_USER=${DB_USER:-traffic_db_user}
+      - DB_PASS=${DB_PASS:-$!gM!nd00125680}
+    depends_on:
+      mysql:
+        condition: service_started  # Keep mysql dependency but use service_started instead of healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Allows container to access host machine
+
