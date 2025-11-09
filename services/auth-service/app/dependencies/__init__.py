@@ -7,6 +7,7 @@ from .auth import (
     require_permission,
     require_role,
     require_superuser,
+    require_admin_or_superuser,
 )
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "require_permission",
     "require_role",
     "require_superuser",
+    "require_admin_or_superuser",
 ]
 

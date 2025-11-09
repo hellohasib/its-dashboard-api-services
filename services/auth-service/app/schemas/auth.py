@@ -123,6 +123,22 @@ class AdminUserUpdate(BaseModel):
     notes: Optional[str] = Field(None, max_length=2000)
     is_active: Optional[bool] = None
     is_verified: Optional[bool] = None
+    roles: Optional[List[str]] = Field(None, description="List of role names to assign to the user")
+
+    @validator("roles", each_item=True)
+    def validate_role_name(cls, role_name: str) -> str:
+        """Ensure each role name is non-empty"""
+        sanitized = role_name.strip()
+        if not sanitized:
+            raise ValueError("Role name cannot be empty")
+        return sanitized
+
+    @validator("roles")
+    def validate_unique_roles(cls, roles: Optional[List[str]]) -> Optional[List[str]]:
+        """Ensure role names are unique"""
+        if roles is not None and len(set(roles)) != len(roles):
+            raise ValueError("Duplicate roles are not allowed")
+        return roles
 
 
 class PasswordChange(BaseModel):

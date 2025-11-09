@@ -15,7 +15,7 @@ from app.services.user_service import UserService
 from app.dependencies.auth import (
     get_current_active_user,
     require_permission,
-    require_superuser,
+    require_admin_or_superuser,
 )
 from app.models.user import User
 
@@ -123,13 +123,13 @@ async def update_user_roles(
 
 
 @router.patch("/{user_id}", response_model=UserResponse)
-async def super_admin_update_user(
+async def admin_update_user(
     user_id: int,
     user_data: AdminUserUpdate,
-    _: User = Depends(require_superuser),
+    current_user: User = Depends(require_admin_or_superuser),
     db: Session = Depends(get_db)
 ):
-    """Update a user's details (super admin only)"""
+    """Update a user's details (admin or super admin only)"""
     user_service = UserService(db)
     user = user_service.get_user_with_roles(user_id)
 
@@ -139,7 +139,7 @@ async def super_admin_update_user(
             detail="User not found"
         )
 
-    updated_user = user_service.admin_update_user(user, user_data)
+    updated_user = user_service.admin_update_user(user, user_data, assigned_by=current_user.id)
     # Reload roles to ensure response reflects latest state
     updated_user = user_service.get_user_with_roles(updated_user.id)
 

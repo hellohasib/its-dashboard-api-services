@@ -98,7 +98,7 @@ class UserService:
         # Reload user with roles
         return self.get_user_with_roles(user.id)
 
-    def admin_update_user(self, user: User, user_data: AdminUserUpdate) -> User:
+    def admin_update_user(self, user: User, user_data: AdminUserUpdate, assigned_by: Optional[int] = None) -> User:
         """Update user details as a super admin"""
         if user_data.full_name is not None:
             user.full_name = user_data.full_name
@@ -115,6 +115,11 @@ class UserService:
 
         self.db.commit()
         self.db.refresh(user)
+        
+        # Update roles if provided
+        if user_data.roles is not None:
+            user = self.update_user_roles(user, user_data.roles, assigned_by=assigned_by)
+        
         return user
 
     def get_user_with_roles(self, user_id: int) -> Optional[User]:
