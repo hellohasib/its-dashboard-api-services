@@ -23,6 +23,9 @@ sys.path.insert(0, anpr_service_dir)
 from services.shared.database.base import Base
 from services.shared.database.session import DATABASE_URL
 
+# Import ANPR service models to register metadata
+from app import models  # noqa: F401
+
 config = context.config
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
 

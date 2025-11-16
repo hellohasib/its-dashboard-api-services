@@ -4,6 +4,7 @@ Auth Service Main Application
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from services.shared.config.settings import settings
+from services.shared.middleware import configure_request_logging
 from services.shared.utils.logger import setup_logger
 from app.api import auth, users
 
@@ -15,6 +16,15 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
+)
+
+# Request logging middleware (must be registered before other middleware)
+configure_request_logging(
+    app,
+    service_name="auth-service",
+    skip_paths={"/health"},
+    skip_prefixes={"/docs", "/openapi"},
+    log_headers=("x-request-id", "x-forwarded-for"),
 )
 
 # CORS Middleware

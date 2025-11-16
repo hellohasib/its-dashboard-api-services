@@ -1,7 +1,8 @@
 """
 User management API routes
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from services.shared.database.session import get_db
 from app.schemas.auth import (
@@ -20,6 +21,38 @@ from app.dependencies.auth import (
 from app.models.user import User
 
 router = APIRouter(prefix="/users", tags=["Users"])
+
+
+@router.get("", response_model=List[UserResponse])
+async def get_all_users(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    current_user: User = Depends(require_admin_or_superuser),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all users (admin or superuser only)
+    """
+    user_service = UserService(db)
+    users = user_service.get_all_users(skip=skip, limit=limit)
+    
+    return [
+        UserResponse(
+            id=user.id,
+            email=user.email,
+            username=user.username,
+            full_name=user.full_name,
+            is_active=user.is_active,
+            is_verified=user.is_verified,
+            is_superuser=user.is_superuser,
+            phone=user.phone,
+            department=user.department,
+            roles=[role.name for role in user.roles],
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+        )
+        for user in users
+    ]
 
 
 @router.get("/me", response_model=UserResponse)

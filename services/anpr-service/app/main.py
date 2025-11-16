@@ -4,7 +4,9 @@ ANPR Service Main Application
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from services.shared.config.settings import settings
+from services.shared.middleware import configure_request_logging
 from services.shared.utils.logger import setup_logger
+from app.api import api_router
 
 logger = setup_logger(__name__)
 
@@ -24,6 +26,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Request logging middleware
+configure_request_logging(
+    app,
+    service_name="anpr-service",
+    skip_paths={"/health"},
+    skip_prefixes={"/docs", "/openapi"},
+    log_headers=("x-request-id", "x-forwarded-for"),
+)
+
+# Include API routers
+app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/health")

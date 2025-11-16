@@ -15,6 +15,7 @@ from app.utils.security import (
     create_refresh_token,
     decode_token,
 )
+from services.shared.audit import record_event
 from services.shared.config.settings import settings
 
 
@@ -59,7 +60,19 @@ class AuthService:
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)
-        
+
+        record_event(
+            action="auth.register",
+            actor_id=str(user.id),
+            target_id=str(user.id),
+            target_type="user",
+            description="User account created",
+            metadata={
+                "email": user.email,
+                "username": user.username,
+            },
+        )
+
         return user
     
     def authenticate_user(self, username: str, password: str) -> Optional[User]:
@@ -86,6 +99,15 @@ class AuthService:
         # If user exists but password is wrong, handle failed login
         if user and not verify_password(login_data.password, user.hashed_password):
             self._handle_failed_login(user)
+            record_event(
+                action="auth.login",
+                actor_id=str(user.id),
+                status="failure",
+                description="Invalid credentials",
+                metadata={"username": login_data.username},
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect username or password"
@@ -93,6 +115,15 @@ class AuthService:
         
         # If user doesn't exist, raise error (but don't increment attempts)
         if not user:
+            record_event(
+                action="auth.login",
+                actor_id=None,
+                status="failure",
+                description="Invalid credentials",
+                metadata={"username": login_data.username},
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect username or password"
@@ -100,6 +131,15 @@ class AuthService:
         
         # Check if user is active
         if not user.is_active:
+            record_event(
+                action="auth.login",
+                actor_id=str(user.id),
+                status="failure",
+                description="Inactive account",
+                metadata={"username": login_data.username},
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="User account is inactive"
@@ -107,6 +147,18 @@ class AuthService:
         
         # Check if account is locked
         if user.locked_until and user.locked_until > datetime.utcnow():
+            record_event(
+                action="auth.login",
+                actor_id=str(user.id),
+                status="failure",
+                description="Account locked",
+                metadata={
+                    "locked_until": user.locked_until.isoformat(),
+                    "username": login_data.username,
+                },
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="User account is locked"
@@ -134,7 +186,20 @@ class AuthService:
         
         self.db.add(refresh_token)
         self.db.commit()
-        
+
+        record_event(
+            action="auth.login",
+            actor_id=str(user.id),
+            target_id=str(user.id),
+            target_type="user",
+            description="User logged in",
+            metadata={
+                "refresh_token_id": refresh_token.id,
+            },
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token_str,
@@ -170,12 +235,26 @@ class AuthService:
         ).first()
         
         if not refresh_token:
+            record_event(
+                action="auth.refresh",
+                actor_id=str(user_id) if user_id else None,
+                status="failure",
+                description="Refresh token revoked or missing",
+                metadata={"token": "***"},
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Refresh token not found or revoked"
             )
         
         if refresh_token.is_expired():
+            record_event(
+                action="auth.refresh",
+                actor_id=str(user_id) if user_id else None,
+                status="failure",
+                description="Refresh token expired",
+                metadata={"token": "***"},
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Refresh token expired"
@@ -184,6 +263,12 @@ class AuthService:
         # Get user
         user = self.db.query(User).filter(User.id == int(user_id)).first()
         if not user or not user.is_active:
+            record_event(
+                action="auth.refresh",
+                actor_id=str(user_id) if user_id else None,
+                status="failure",
+                description="User not found or inactive",
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User not found or inactive"
@@ -192,6 +277,14 @@ class AuthService:
         # Create new access token
         access_token = create_access_token(data={"sub": str(user.id)})
         
+        record_event(
+            action="auth.refresh",
+            actor_id=str(user.id),
+            target_id=str(user.id),
+            target_type="user",
+            description="Access token refreshed",
+        )
+
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token_str,
@@ -212,8 +305,21 @@ class AuthService:
             refresh_token.is_revoked = True
             refresh_token.revoked_at = datetime.utcnow()
             self.db.commit()
+            record_event(
+                action="auth.logout",
+                actor_id=str(refresh_token.user_id),
+                target_id=str(refresh_token.user_id),
+                target_type="user",
+                description="User logged out",
+                metadata={"refresh_token_id": refresh_token.id},
+            )
             return True
         
+        record_event(
+            action="auth.logout",
+            status="failure",
+            description="Refresh token not found",
+        )
         return False
     
     def logout_all(self, user_id: int) -> bool:
@@ -230,6 +336,14 @@ class AuthService:
             token.revoked_at = datetime.utcnow()
         
         self.db.commit()
+        record_event(
+            action="auth.logout_all",
+            actor_id=str(user_id),
+            target_id=str(user_id),
+            target_type="user",
+            description="All refresh tokens revoked",
+            metadata={"revoked_tokens": len(refresh_tokens)},
+        )
         return True
     
     def _handle_failed_login(self, user: Optional[User]):

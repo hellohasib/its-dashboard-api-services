@@ -55,6 +55,14 @@ services:
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-525600}
       - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS:-365}
       - APP_ENV=${APP_ENV:-development}
+      - SERVICE_NAME=auth-service
+      - SERVICE_NAMESPACE=traffic-system
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+      - LOG_DESTINATION=${LOG_DESTINATION:-console}
+      - OTLP_ENDPOINT=${OTLP_ENDPOINT:-http://otel-collector:4317}
+      - LOKI_ENDPOINT=${LOKI_ENDPOINT:-http://loki:3100}
+      - LOKI_TIMEOUT_SECONDS=${LOKI_TIMEOUT_SECONDS:-5}
       - PYTHONPATH=/app
     ports:
       - "8001:8000"
@@ -73,8 +81,8 @@ services:
 
   anpr-service:
     build:
-      context: ./services/anpr-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./services/anpr-service/Dockerfile
     container_name: traffic-anpr-service
     environment:
       - DB_HOST=mysql
@@ -86,11 +94,22 @@ services:
       - REDIS_PORT=6379
       - AUTH_SERVICE_URL=http://auth-service:8000
       - APP_ENV=${APP_ENV:-development}
+      - DEBUG=${DEBUG:-True}
+      - SERVICE_NAME=anpr-service
+      - SERVICE_NAMESPACE=traffic-system
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+      - LOG_DESTINATION=${LOG_DESTINATION:-console}
+      - OTLP_ENDPOINT=${OTLP_ENDPOINT:-http://otel-collector:4317}
+      - LOKI_ENDPOINT=${LOKI_ENDPOINT:-http://loki:3100}
+      - LOKI_TIMEOUT_SECONDS=${LOKI_TIMEOUT_SECONDS:-5}
+      - PYTHONPATH=/app
     ports:
       - "8002:8000"
     volumes:
-      - ./services/anpr-service:/app
+      - ./services:/app/services
       - /app/__pycache__
+      - /app/services/__pycache__
     depends_on:
       mysql:
         condition: service_healthy
@@ -102,10 +121,53 @@ services:
       - traffic-network
     restart: unless-stopped
 
+  frontend:
+    build:
+      context: ../traffic-system-frontend
+      dockerfile: Dockerfile
+    container_name: traffic-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - auth-service
+    networks:
+      - traffic-network
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:2.9.5
+    container_name: traffic-loki
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "${LOKI_HTTP_PORT:-3100}:3100"
+    volumes:
+      - loki_data:/loki
+    networks:
+      - traffic-network
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.94.0
+    container_name: traffic-otel-collector
+    depends_on:
+      loki:
+        condition: service_started
+    volumes:
+      - ./docker/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    command: ["--config", "/etc/otel-collector-config.yaml"]
+    ports:
+      - "${OTEL_COLLECTOR_GRPC_PORT:-4317}:4317"
+      - "${OTEL_COLLECTOR_HTTP_PORT:-4318}:4318"
+    networks:
+      - traffic-network
+    restart: unless-stopped
+
 volumes:
   mysql_data:
     driver: local
   redis_data:
+    driver: local
+  loki_data:
     driver: local
 
 networks:

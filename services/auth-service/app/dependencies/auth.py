@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 from datetime import datetime
 from services.shared.database.session import get_db
+from services.shared.utils import logging_context as log_ctx
 from app.models.user import User
 from app.utils.security import decode_token
 from app.schemas.auth import TokenData
@@ -49,7 +50,15 @@ async def get_current_user(
     user = db.query(User).filter(User.id == int(user_id)).first()
     if user is None:
         raise credentials_exception
-    
+
+    roles = [role.name for role in getattr(user, "roles", [])]
+    log_ctx.bind_user_context(
+        user_id=str(user.id),
+        username=user.username,
+        email=user.email,
+        roles=roles,
+    )
+
     return user
 
 

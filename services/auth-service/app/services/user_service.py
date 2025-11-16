@@ -9,6 +9,7 @@ from app.models.user import User
 from app.models.role import Role
 from app.models.user_role import UserRole
 from app.schemas.auth import UserUpdate, PasswordChange, AdminUserUpdate
+from services.shared.audit import record_event
 from app.utils.security import verify_password, get_password_hash
 
 
@@ -41,6 +42,21 @@ class UserService:
         
         self.db.commit()
         self.db.refresh(user)
+
+        updated_fields = {
+            key: getattr(user_data, key)
+            for key in ["full_name", "phone", "department"]
+            if getattr(user_data, key) is not None
+        }
+        record_event(
+            action="user.profile.update",
+            actor_id=str(user.id),
+            target_id=str(user.id),
+            target_type="user",
+            description="User updated own profile",
+            metadata={"updated_fields": updated_fields},
+        )
+
         return user
     
     def change_password(self, user: User, password_data: PasswordChange) -> bool:
@@ -57,6 +73,13 @@ class UserService:
         user.password_changed_at = datetime.utcnow()
         
         self.db.commit()
+        record_event(
+            action="user.password.change",
+            actor_id=str(user.id),
+            target_id=str(user.id),
+            target_type="user",
+            description="User changed password",
+        )
         return True
     
     def update_user_roles(self, user: User, role_names: List[str], assigned_by: Optional[int] = None) -> User:
@@ -96,22 +119,40 @@ class UserService:
         self.db.commit()
 
         # Reload user with roles
-        return self.get_user_with_roles(user.id)
+        updated_user = self.get_user_with_roles(user.id)
+
+        record_event(
+            action="user.roles.update",
+            actor_id=str(assigned_by) if assigned_by is not None else str(user.id),
+            target_id=str(user.id),
+            target_type="user",
+            description="User roles updated",
+            metadata={"roles": [role.name for role in updated_user.roles]},
+        )
+
+        return updated_user
 
     def admin_update_user(self, user: User, user_data: AdminUserUpdate, assigned_by: Optional[int] = None) -> User:
         """Update user details as a super admin"""
+        updated_fields = {}
         if user_data.full_name is not None:
             user.full_name = user_data.full_name
+            updated_fields["full_name"] = user_data.full_name
         if user_data.phone is not None:
             user.phone = user_data.phone
+            updated_fields["phone"] = user_data.phone
         if user_data.department is not None:
             user.department = user_data.department
+            updated_fields["department"] = user_data.department
         if user_data.notes is not None:
             user.notes = user_data.notes
+            updated_fields["notes"] = user_data.notes
         if user_data.is_active is not None:
             user.is_active = user_data.is_active
+            updated_fields["is_active"] = user_data.is_active
         if user_data.is_verified is not None:
             user.is_verified = user_data.is_verified
+            updated_fields["is_verified"] = user_data.is_verified
 
         self.db.commit()
         self.db.refresh(user)
@@ -120,6 +161,16 @@ class UserService:
         if user_data.roles is not None:
             user = self.update_user_roles(user, user_data.roles, assigned_by=assigned_by)
         
+        if updated_fields:
+            record_event(
+                action="user.admin.update",
+                actor_id=str(assigned_by) if assigned_by is not None else None,
+                target_id=str(user.id),
+                target_type="user",
+                description="Admin updated user profile",
+                metadata={"updated_fields": updated_fields},
+            )
+
         return user
 
     def get_user_with_roles(self, user_id: int) -> Optional[User]:
@@ -129,4 +180,12 @@ class UserService:
             # Trigger loading of roles
             _ = user.roles
         return user
+
+    def get_all_users(self, skip: int = 0, limit: int = 100) -> List[User]:
+        """Get all users with their roles"""
+        users = self.db.query(User).offset(skip).limit(limit).all()
+        # Trigger loading of roles for all users
+        for user in users:
+            _ = user.roles
+        return users
 
