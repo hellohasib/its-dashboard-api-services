@@ -8,10 +8,12 @@ from sqlalchemy import Column, String, Text, Boolean
 from sqlalchemy.orm import relationship
 from services.shared.database.base import BaseModel, Base
 from .user_role import UserRole
+from .role_service_access import RoleServiceAccess
 
 if TYPE_CHECKING:
     from .user import User
     from .permission import Permission
+    from .service import Service
 
 
 class Role(BaseModel):
@@ -37,6 +39,18 @@ class Role(BaseModel):
         secondary="role_permissions",
         back_populates="roles",
         lazy="selectin"
+    )
+    service_access_links = relationship(
+        "RoleServiceAccess",
+        back_populates="role",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    services = relationship(
+        "Service",
+        secondary="role_service_accesses",
+        back_populates="roles",
+        lazy="selectin",
     )
 
     def __repr__(self):

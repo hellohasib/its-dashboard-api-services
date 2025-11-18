@@ -8,17 +8,17 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
-COPY services/anpr-service/requirements.txt /tmp/requirements.txt
+COPY traffic-system-backend/services/anpr-service/requirements.txt /tmp/requirements.txt
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r /tmp/requirements.txt
 
 # Copy shared directory
-COPY services/shared /app/services/shared
+COPY traffic-system-backend/services/shared /app/services/shared
 
 # Copy application code
-COPY services/anpr-service /app/services/anpr-service
+COPY traffic-system-backend/services/anpr-service /app/services/anpr-service
 
 # Set working directory to the anpr-service directory
 WORKDIR /app/services/anpr-service
@@ -27,7 +27,7 @@ WORKDIR /app/services/anpr-service
 ENV PYTHONPATH=/app/services
 
 # Copy and set entrypoint script
-COPY services/anpr-service/entrypoint.sh /entrypoint.sh
+COPY traffic-system-backend/services/anpr-service/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Expose port

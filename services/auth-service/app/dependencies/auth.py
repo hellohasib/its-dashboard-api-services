@@ -126,7 +126,7 @@ async def require_superuser(
     """
     Require superuser privileges
     """
-    if not current_user.is_superuser:
+    if not (current_user.is_superuser or current_user.has_role("super_admin")):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Superuser privileges required"

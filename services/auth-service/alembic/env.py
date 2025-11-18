@@ -91,9 +91,12 @@ from app.models.permission import Permission
 from app.models.refresh_token import RefreshToken
 from app.models.user_role import UserRole
 from app.models.role_permission import RolePermission
+from app.models.service import Service
+from app.models.role_service_access import RoleServiceAccess
 
 # Set target metadata for autogenerate
 target_metadata = Base.metadata
+VERSION_TABLE = "auth_alembic_version"
 
 
 def run_migrations_offline() -> None:
@@ -106,6 +109,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        version_table=VERSION_TABLE,
     )
 
     with context.begin_transaction():
@@ -114,7 +118,6 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
-    # Inject custom URL into config section to avoid interpolation issues
     section = config.get_section(config.config_ini_section, {}).copy()
     db_url_override = config.attributes.get("sqlalchemy.url")
     if db_url_override:
@@ -128,7 +131,9 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            version_table=VERSION_TABLE,
         )
 
         with context.begin_transaction():

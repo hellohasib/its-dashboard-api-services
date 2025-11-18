@@ -39,8 +39,8 @@ services:
 
   auth-service:
     build:
-      context: .
-      dockerfile: ./services/auth-service/Dockerfile
+      context: ..  # Parent directory to access both backend and frontend-figma
+      dockerfile: ./traffic-system-backend/services/auth-service/Dockerfile
     container_name: traffic-auth-service
     environment:
       - DB_HOST=mysql
@@ -65,9 +65,9 @@ services:
       - LOKI_TIMEOUT_SECONDS=${LOKI_TIMEOUT_SECONDS:-5}
       - PYTHONPATH=/app
     ports:
-      - "8001:8000"
+      - "8001:8000"  # Frontend and Auth API both served on port 8001
     volumes:
-      - ./services:/app/services
+      - ./services:/app/services  # Mount from traffic-system-backend/services
       - /app/__pycache__
       - /app/services/__pycache__
     depends_on:
@@ -75,14 +75,20 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
       - traffic-network
     restart: unless-stopped
 
   anpr-service:
     build:
-      context: .
-      dockerfile: ./services/anpr-service/Dockerfile
+      context: ..  # Parent directory for consistency
+      dockerfile: ./traffic-system-backend/services/anpr-service/Dockerfile
     container_name: traffic-anpr-service
     environment:
       - DB_HOST=mysql
@@ -117,19 +123,6 @@ services:
         condition: service_healthy
       auth-service:
         condition: service_started
-    networks:
-      - traffic-network
-    restart: unless-stopped
-
-  frontend:
-    build:
-      context: ../traffic-system-frontend
-      dockerfile: Dockerfile
-    container_name: traffic-frontend
-    ports:
-      - "3000:80"
-    depends_on:
-      - auth-service
     networks:
       - traffic-network
     restart: unless-stopped

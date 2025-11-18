@@ -96,37 +96,37 @@ class AuthService:
         # First, try to find user by username
         user = self.db.query(User).filter(User.username == login_data.username).first()
         
-        # If user exists but password is wrong, handle failed login
-        if user and not verify_password(login_data.password, user.hashed_password):
-            self._handle_failed_login(user)
-            record_event(
-                action="auth.login",
-                actor_id=str(user.id),
-                status="failure",
-                description="Invalid credentials",
-                metadata={"username": login_data.username},
-                ip_address=ip_address,
-                user_agent=user_agent,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect username or password"
-            )
-        
-        # If user doesn't exist, raise error (but don't increment attempts)
+        # If user doesn't exist, return specific error
         if not user:
             record_event(
                 action="auth.login",
                 actor_id=None,
                 status="failure",
-                description="Invalid credentials",
+                description="Username not found",
                 metadata={"username": login_data.username},
                 ip_address=ip_address,
                 user_agent=user_agent,
             )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect username or password"
+                detail="Username not found"
+            )
+        
+        # If user exists but password is wrong, handle failed login
+        if not verify_password(login_data.password, user.hashed_password):
+            self._handle_failed_login(user)
+            record_event(
+                action="auth.login",
+                actor_id=str(user.id),
+                status="failure",
+                description="Incorrect password",
+                metadata={"username": login_data.username},
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect password"
             )
         
         # Check if user is active
